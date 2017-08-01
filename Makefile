@@ -6,13 +6,11 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 READELF = $(CROSS_COMPILE)readelf
 
-OBJS	:= main.o benchmark_aux.o
+OBJS := main.o benchmark_aux.o
 
-CFLAGS += -Wall -I$(TEEC_EXPORT)/include\
-		-I./include -I$(TEEC_INTERNAL_INCLUDES)/include
+CFLAGS += -Wall -Wextra -Werror -I$(TEEC_EXPORT)/include -I$(TEEC_INTERNAL_INCLUDES)/include
 #Add/link other required libraries here
 LDADD += -lm -lteec -lpthread -L$(TEEC_EXPORT)/lib
-CROSS_COMPILE="$(HOST_CROSS_COMPILE)"
 
 BINARY = benchmark
 
@@ -20,7 +18,7 @@ BINARY = benchmark
 all: $(BINARY)
 
 $(BINARY): $(OBJS)
-	$(CC) $(LDADD) $(OBJS) -o $(BINARY)
+	$(CC) $(LDADD) -o $@ $^
 
 .PHONY: clean
 clean:
