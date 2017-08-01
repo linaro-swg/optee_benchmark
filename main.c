@@ -84,6 +84,7 @@ static void close_bench_pta(void)
 
 static void init_ts_global(void *ts_global, uint32_t cores)
 {
+	unsigned int i;
 	struct tee_ts_cpu_buf *cpu_buf;
 
 	/* init global timestamp buffer */
@@ -91,7 +92,7 @@ static void init_ts_global(void *ts_global, uint32_t cores)
 	bench_ts_global->cores = cores;
 
 	/* init per-cpu timestamp buffers */
-	for (int i = 0; i < cores; i++) {
+	for (i = 0; i < cores; i++) {
 		cpu_buf = &bench_ts_global->cpu_buf[i];
 		memset(cpu_buf, 0, sizeof(struct tee_ts_cpu_buf));
 	}
@@ -166,7 +167,8 @@ static int timestamp_pop(struct tee_ts_cpu_buf *cpu_buf,
 
 static void *ts_consumer(void *arg)
 {
-	int i, ret;
+	unsigned int i;
+	int ret;
 	bool ts_received = false;
 	uint32_t cores;
 	struct tee_time_st ts_data;
@@ -192,18 +194,19 @@ static void *ts_consumer(void *arg)
 						&ts_data);
 			if (!ret) {
 				ts_received = true;
-				fprintf(ts_file, "%ld\t%lld\t0x%"
+				fprintf(ts_file, "%u\t%lld\t0x%"
 						PRIx64 "\t%s\n",
 						i, ts_data.cnt, ts_data.addr,
 						bench_str_src(ts_data.src));
 			}
 		}
 
-		if (!ts_received)
+		if (!ts_received) {
 			if (is_running)
 				sched_yield();
 			else
 				goto file_close;
+		}
 	}
 
 file_close:
