@@ -33,12 +33,12 @@
 #include <unistd.h>
 
 #include "benchmark_aux.h"
+#include "common.h"
 
 /* Misc auxilary functions */
 void tee_errx(const char *msg, TEEC_Result res)
 {
-	fprintf(stderr, "%s: 0x%08x\n", msg, res);
-	exit(1);
+	ERROR_EXIT("%s: 0x%08x\n", msg, res);
 }
 
 void tee_check_res(TEEC_Result res, const char *errmsg)
@@ -51,17 +51,15 @@ const char *bench_str_src(uint64_t source)
 {
 	switch (source) {
 	case TEE_BENCH_CORE:
-		return "CORE";
+		return "core";
 	case TEE_BENCH_KMOD:
-		return "KMOD";
+		return "kmodule";
 	case TEE_BENCH_CLIENT:
-		return "CLIENT";
+		return "libteec";
 	case TEE_BENCH_UTEE:
-		return "UTEE";
-	case TEE_BENCH_DUMB_TA:
-		return "DUMB_TA";
+		return "libutee";
 	default:
-		return "???";
+		return "-";
 	}
 }
 

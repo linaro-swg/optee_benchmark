@@ -40,26 +40,31 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <yaml.h>
 
 #include "benchmark_aux.h"
+#include "common.h"
 
-#define STAT_AMOUNT 5
-#define TSFILE_NAME_SUFFIX			".ts"
-
-#define RING_SUCCESS	0
-#define RING_BADPARM	-1
-#define RING_NODATA		-2
+#define MAX_SCALAR	20
+static struct tee_ts_global *bench_ts_global;
 
 static const TEEC_UUID pta_benchmark_uuid = PTA_BENCHMARK_UUID;
-struct tee_ts_global *bench_ts_global;
-static bool is_running;
-
 static TEEC_SharedMemory ts_buf_shm = {
 		.flags = TEEC_MEM_INPUT | TEEC_MEM_OUTPUT
 };
-
 static TEEC_Context ctx;
 static TEEC_Session sess;
+
+static volatile sig_atomic_t is_running;
+static yaml_emitter_t emitter;
+
+
+void sigint_handler(int data)
+{
+	(void)data;
+
+	is_running = 0;
+}
 
 static void open_bench_pta(void)
 {
@@ -165,6 +170,155 @@ static int timestamp_pop(struct tee_ts_cpu_buf *cpu_buf,
 	return 0;
 }
 
+static bool init_emitter(FILE *ts_file)
+{
+	yaml_event_t event;
+
+	if (!yaml_emitter_initialize(&emitter))
+		ERROR_RETURN_FALSE("Can't initialize YAML emitter");
+
+	yaml_emitter_set_canonical(&emitter, 0);
+	yaml_emitter_set_unicode(&emitter, 1);
+	yaml_emitter_set_output_file(&emitter, ts_file);
+
+	/* Stream start */
+	if (!yaml_stream_start_event_initialize(&event, YAML_UTF8_ENCODING))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML stream start event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML stream start event");
+
+	/* Document start */
+	if (!yaml_document_start_event_initialize(&event,
+							NULL, NULL, NULL, YAML_IMPLICIT))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML document start event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML doc start event");
+
+	/* Mapping start */
+	if (!yaml_mapping_start_event_initialize(&event,
+				NULL, NULL , YAML_IMPLICIT,
+				YAML_ANY_SEQUENCE_STYLE))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML mapping start event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete,
+				"Failed to emit YAML sequence mapping event");
+	/* Key timestamps */
+	yaml_scalar_event_initialize(&event, NULL, NULL,
+		(yaml_char_t *)"timestamps", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+
+	/* Sequence start */
+	if (!yaml_sequence_start_event_initialize(&event,
+				NULL, NULL , YAML_IMPLICIT,
+				YAML_ANY_SEQUENCE_STYLE))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML sequence start event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML sequence start event");
+
+	return true;
+emitter_delete:
+	yaml_emitter_delete(&emitter);
+	return false;
+}
+
+static void deinit_emitter()
+{
+	yaml_event_t event;
+
+	/* Sequence cmd */
+	if (!yaml_sequence_end_event_initialize(&event))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML sequence end event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML sequence end event");
+
+	/* Mapping end */
+	if (!yaml_mapping_end_event_initialize(&event))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML mapping end event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete,
+				"Failed to emit YAML mapping end event");
+
+	/* Document end */
+	if (!yaml_document_end_event_initialize(&event, 0))
+		ERROR_GOTO(emitter_delete,
+				"Failed to initialize YAML document end event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML doc end event");
+
+	/* Stream end */
+	if (!yaml_stream_end_event_initialize(&event))
+		ERROR_GOTO(emitter_delete,
+				"Error occured while initialising YAML stream end event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML stream end event");
+
+emitter_delete:
+	yaml_emitter_delete(&emitter);
+}
+
+static bool fill_map(char *var, char *value)
+{
+	yaml_event_t event;
+
+	yaml_scalar_event_initialize(&event, NULL, NULL,
+		(yaml_char_t *)var, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+
+	yaml_scalar_event_initialize(&event, NULL, NULL,
+		(yaml_char_t *)value, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+
+	return true;
+}
+
+static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
+							const char *subsystem)
+{
+	yaml_event_t event;
+	char data[MAX_SCALAR];
+
+	/* Mapping start */
+	if (!yaml_mapping_start_event_initialize(&event,
+				NULL, NULL , YAML_IMPLICIT,
+				YAML_ANY_SEQUENCE_STYLE))
+		ERROR_RETURN_FALSE("Failed to initialize YAML mapping start event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML mapping start event");
+
+	snprintf(data, MAX_SCALAR, "%" PRIu32, core);
+	fill_map("core", data);
+
+	snprintf(data, MAX_SCALAR, "%" PRIu64, count);
+	fill_map("counter", data);
+
+	snprintf(data, MAX_SCALAR, "0x%" PRIx64, addr);
+	fill_map("address", data);
+
+	snprintf(data, MAX_SCALAR, "%s", subsystem);
+	fill_map("component", data);
+
+	/* Mapping end */
+	if (!yaml_mapping_end_event_initialize(&event))
+		ERROR_RETURN_FALSE("Failed to initialize YAML mapping end event");
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML mapping end event");
+
+	return true;
+}
+
+/*
+ * Consume all timestamps from per-cpu ringbuffers and put everything into
+ * the yaml file.
+ */
 static void *ts_consumer(void *arg)
 {
 	unsigned int i;
@@ -173,19 +327,21 @@ static void *ts_consumer(void *arg)
 	uint32_t cores;
 	struct tee_time_st ts_data;
 	FILE *ts_file;
-	char *tsfile_path;
+	char *tsfile_path = arg;
 
-	tsfile_path = arg;
 	if (!tsfile_path)
-		goto exit;
+		ERROR_GOTO(exit, "Wrong timestamp file path");
 
 	cores = get_cores();
 	if (!cores)
-		goto exit;
+		ERROR_GOTO(exit, "Can't receive amount of avalable cores");
 
 	ts_file = fopen(tsfile_path, "w");
 	if (!ts_file)
-		goto exit;
+		ERROR_GOTO(exit, "Can't open timestamp file");
+
+	if (!init_emitter(ts_file))
+		ERROR_GOTO(file_close, "Error occured in emitter initialization");
 
 	while (is_running) {
 		ts_received = false;
@@ -194,21 +350,30 @@ static void *ts_consumer(void *arg)
 						&ts_data);
 			if (!ret) {
 				ts_received = true;
-				fprintf(ts_file, "%u\t%lld\t0x%"
-						PRIx64 "\t%s\n",
+				DBG("Timestamp: core = %u; tick = %lld; pc = 0x%"
+						PRIx64 ";system = %s",
 						i, ts_data.cnt, ts_data.addr,
 						bench_str_src(ts_data.src));
+				if (!fill_timestamp(i, ts_data.cnt,
+						ts_data.addr, bench_str_src(ts_data.src)))
+					ERROR_GOTO(deinit_yaml, "Adding timestamp failed");
+
 			}
 		}
 
 		if (!ts_received) {
-			if (is_running)
+			if (is_running) {
+				DBG("yielding...");
 				sched_yield();
-			else
-				goto file_close;
+			} else {
+				ERROR_GOTO(deinit_yaml,
+					"No new data in the per-cpu ringbuffers, closing ts file");
+			}
 		}
 	}
 
+deinit_yaml:
+	deinit_emitter();
 file_close:
 	fclose(ts_file);
 exit:
@@ -240,15 +405,16 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	printf("1. Opening Benchmark Static TA...\n");
+	signal(SIGINT, sigint_handler);
+
+	INFO("1. Opening Benchmark Static TA...");
 	open_bench_pta();
 
 	cores = get_cores();
 	if (!cores)
-		tee_errx("Receiving amount of active cores failed",
-					EXIT_FAILURE);
+		ERROR_EXIT("Receiving amount of active cores failed");
 
-	printf("2. Allocating per-core buffers, cores detected = %d\n",
+	INFO("2. Allocating per-core buffers, cores detected = %d",
 					cores);
 	register_bench_buf(cores);
 
@@ -258,32 +424,33 @@ int main(int argc, char *argv[])
 
 	alloc_argv(argc, argv, &testapp_argv);
 
-	printf("3. Starting origin host app %s ...\n", testapp_path);
+	INFO("3. Starting origin host app %s ...", testapp_path);
 
 	/* fork/exec here */
 	pid = fork();
 
 	if (pid == -1) {
-		tee_errx("fork() failed", EXIT_FAILURE);
+		DBG("fork() failed");
+		ERROR_EXIT("Starting origin host application failed.");
 	} else if (pid > 0) {
 		is_running = 1;
 
 		tsfile_path = malloc(strlen(testapp_path) +
 					strlen(TSFILE_NAME_SUFFIX) + 1);
 		if (!tsfile_path)
-			return 1;
+			ERROR_EXIT("Memory allocation failed for timestamp file path.");
 
 		tsfile_path[0] = '\0';
 		strcat(tsfile_path, testapp_path);
 		strcat(tsfile_path, TSFILE_NAME_SUFFIX);
 
-		printf("Dumping timestamps to %s ...\n", tsfile_path);
+		INFO("Dumping timestamps to %s ...", tsfile_path);
 		print_line();
 
 		if (pthread_create(&consumer_thread, NULL,
 				ts_consumer, tsfile_path)) {
-			fprintf(stderr, "Error creating ts consumer thread\n");
-			return 1;
+			DBG( "Error creating ts consumer thread");
+			ERROR_EXIT("Can't start process of reading timestamps");
 		}
 		/* wait for child app exits */
 		waitpid(pid, &status, 0);
@@ -291,16 +458,17 @@ int main(int argc, char *argv[])
 
 		/* wait for our consumer thread terminate */
 		if (pthread_join(consumer_thread, NULL)) {
-			fprintf(stderr, "Error joining thread\n");
-			return 2;
+			DBG("Error joining thread");
+			ERROR_EXIT("Something went wrong while consuming timestamps");
 		}
 	}
 	else {
 		execvp(testapp_path, testapp_argv);
-		tee_errx("execve() failed", EXIT_FAILURE);
+		DBG("execve() failed");
+		ERROR_EXIT("Starting origin host application failed");
 	}
 
-	printf("4. Done benchmark\n");
+	INFO("4. Done benchmark");
 
 	dealloc_argv(argc-1, testapp_argv);
 	unregister_bench();
