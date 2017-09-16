@@ -46,6 +46,7 @@
 #include "common.h"
 
 #define MAX_SCALAR	20
+
 static struct tee_ts_global *bench_ts_global;
 
 static const TEEC_UUID pta_benchmark_uuid = PTA_BENCHMARK_UUID;
@@ -170,9 +171,27 @@ static int timestamp_pop(struct tee_ts_cpu_buf *cpu_buf,
 	return 0;
 }
 
+static bool fill_map(char *var, char *value)
+{
+	yaml_event_t event;
+
+	yaml_scalar_event_initialize(&event, NULL, NULL,
+		(yaml_char_t *)var, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+
+	yaml_scalar_event_initialize(&event, NULL, NULL,
+		(yaml_char_t *)value, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
+	if (!yaml_emitter_emit(&emitter, &event))
+		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+
+	return true;
+}
+
 static bool init_emitter(FILE *ts_file)
 {
 	yaml_event_t event;
+	char data[MAX_SCALAR];
 
 	if (!yaml_emitter_initialize(&emitter))
 		ERROR_RETURN_FALSE("Can't initialize YAML emitter");
@@ -205,6 +224,19 @@ static bool init_emitter(FILE *ts_file)
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_GOTO(emitter_delete,
 				"Failed to emit YAML sequence mapping event");
+	/*
+	 * Filling header
+	 */
+	snprintf(data, MAX_SCALAR, "%" PRIu64, bench_ts_global->cores);
+	fill_map("cores", data);
+
+	snprintf(data, MAX_SCALAR, "%" PRIu64, bench_ts_global->freq);
+	fill_map("timer_frequency", data);
+
+	/*
+	 * Filling timestamps
+	 */
+
 	/* Key timestamps */
 	yaml_scalar_event_initialize(&event, NULL, NULL,
 		(yaml_char_t *)"timestamps", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
@@ -261,23 +293,6 @@ static void deinit_emitter()
 
 emitter_delete:
 	yaml_emitter_delete(&emitter);
-}
-
-static bool fill_map(char *var, char *value)
-{
-	yaml_event_t event;
-
-	yaml_scalar_event_initialize(&event, NULL, NULL,
-		(yaml_char_t *)var, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
-	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
-
-	yaml_scalar_event_initialize(&event, NULL, NULL,
-		(yaml_char_t *)value, -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
-	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
-
-	return true;
 }
 
 static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
@@ -350,7 +365,7 @@ static void *ts_consumer(void *arg)
 						&ts_data);
 			if (!ret) {
 				ts_received = true;
-				DBG("Timestamp: core = %u; tick = %lld; pc = 0x%"
+				DBG("Timestamp: core = %u; tick = %" PRIu64 "; pc = 0x%"
 						PRIx64 ";system = %s",
 						i, ts_data.cnt, ts_data.addr,
 						bench_str_src(ts_data.src));
