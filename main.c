@@ -228,10 +228,13 @@ static bool init_emitter(FILE *ts_file)
 	 * Filling header
 	 */
 	snprintf(data, MAX_SCALAR, "%" PRIu64, bench_ts_global->cores);
-	fill_map("cores", data);
+	if (!fill_map("cores", data))
+		ERROR_GOTO(emitter_delete, "Failed to write map element");
+
 
 	snprintf(data, MAX_SCALAR, "%" PRIu64, bench_ts_global->freq);
-	fill_map("timer_frequency", data);
+	if (!fill_map("timer_frequency", data))
+		ERROR_GOTO(emitter_delete, "Failed to write map element");
 
 	/*
 	 * Filling timestamps
@@ -241,7 +244,7 @@ static bool init_emitter(FILE *ts_file)
 	yaml_scalar_event_initialize(&event, NULL, NULL,
 		(yaml_char_t *)"timestamps", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_RETURN_FALSE("Failed to emit YAML scalar");
+		ERROR_GOTO(emitter_delete, "Failed to emit YAML scalar");
 
 	/* Sequence start */
 	if (!yaml_sequence_start_event_initialize(&event,
@@ -310,16 +313,20 @@ static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
 		ERROR_RETURN_FALSE("Failed to emit YAML mapping start event");
 
 	snprintf(data, MAX_SCALAR, "%" PRIu32, core);
-	fill_map("core", data);
+	if (!fill_map("core", data))
+		ERROR_RETURN_FALSE("Failed to write map element");
 
 	snprintf(data, MAX_SCALAR, "%" PRIu64, count);
-	fill_map("counter", data);
+	if (!fill_map("counter", data))
+		ERROR_RETURN_FALSE("Failed to write map element");
 
 	snprintf(data, MAX_SCALAR, "0x%" PRIx64, addr);
-	fill_map("address", data);
+	if (!fill_map("address", data))
+		ERROR_RETURN_FALSE("Failed to write map element");
 
 	snprintf(data, MAX_SCALAR, "%s", subsystem);
-	fill_map("component", data);
+	if (!fill_map("component", data))
+		ERROR_RETURN_FALSE("Failed to write map element");
 
 	/* Mapping end */
 	if (!yaml_mapping_end_event_initialize(&event))
