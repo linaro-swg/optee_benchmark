@@ -77,6 +77,7 @@ void alloc_argv(int argc, char *argv[], char **new_argv[])
 	char *res, *base;
 	char path[PATH_MAX];
 	char **testapp_argv;
+	int i;
 
 	res = realpath(argv[1], path);
 	if (!res)
@@ -96,7 +97,7 @@ void alloc_argv(int argc, char *argv[], char **new_argv[])
 
 	memcpy(testapp_argv[0], base, strlen(base) + 1);
 
-	for (int i = 2; i < argc; i++) {
+	for (i = 2; i < argc; i++) {
 		size_t length = strlen(argv[i]) + 1;
 
 		testapp_argv[i - 1] = malloc(length);
@@ -109,7 +110,8 @@ void alloc_argv(int argc, char *argv[], char **new_argv[])
 
 void dealloc_argv(int new_argc, char **new_argv)
 {
-	for (int i = 0; i < new_argc; ++i)
+	int i;
+	for (i = 0; i < new_argc; ++i)
 		free(new_argv[i]);
 
 	free(new_argv);
