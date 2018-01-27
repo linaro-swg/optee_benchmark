@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# Copyright (c) 2017, Linaro Limited
+#
 
 import config
 import io
@@ -30,7 +34,7 @@ class Addr2Line(object):
                                         "-e", str(binary)],
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE)
-        # and lets use buffered input
+        # and let's use buffered input
         self.stdin_wrapper = io.TextIOWrapper(self.process.stdin,
                                               'utf-8')
 
@@ -69,7 +73,7 @@ class Timestamp(object):
     Able to parse address of binary file of subsystem and provide
     actual source file and line
     """
-    __symbol_parsers = {}
+    _symbol_parsers = {}
 
     def __init__(self, core, counter, subsystem, address, payload):
         self.core = core
@@ -81,21 +85,21 @@ class Timestamp(object):
         self.address = long(address)
         self.payload = payload
 
-        self.__parse_addr()
+        self._parse_addr()
 
-    def __parse_addr(self):
+    def _parse_addr(self):
         if self.address and self.subsystem:
             if self.subsystem not in self.__symbol_parsers:
-                self.__symbol_parsers[self.subsystem, Addr2Line(
+                self._symbol_parsers[self.subsystem, Addr2Line(
                     config.subsystem_paths[self.subsystem])]
 
             (self.filename, self.line) = \
-                self.__symbol_parsers[self.subsystem].lookup(self.address)
+                self._symbol_parsers[self.subsystem].lookup(self.address)
 
         else:
             raise ValueError('Timestamp address/subsystem isn\'t initialized')
 
-    def __parse_payload(self):
+    def _parse_payload(self):
         raise NotImplementedError
 
 
@@ -103,7 +107,7 @@ class TimestampParser(object):
     def __init__(self, yaml_path):
         if not (isinstance(yaml_path, Path) and
                 yaml_path.is_file()):
-            raise ValueError
+            raise RuntimeError("Cannot find file: {}.".format(str(yaml_path)))
 
         self.i = 0
         self.yaml_path = yaml_path

@@ -1,8 +1,21 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# Copyright (c) 2017, Linaro Limited
+#
 
 from enum import Enum
+import sys
 
 __all__ = ['BenchmarkCase', 'cases']
+
+
+if __name__ == '__main__':
+    sys.exit("This source file should be used only as a module")
+
+
+def whoami():
+        return sys._getframe(1).f_code.co_name
 
 
 class BenchmarkCase(Enum):
@@ -14,13 +27,13 @@ class BenchmarkCase(Enum):
 
 
 def benchmark_client2tee(timestamp_parser):
-    print("Analyzing client2tee")
-    raise NotImplementedError
+    raise NotImplementedError(
+        "{} is not implemented".format(whoami()))
 
 
 def benchmark_kernelmode2tee(timestamp_parser):
-    print("Analyzing kernel2tee")
-    raise NotImplementedError
+    raise NotImplementedError(
+        "{} is not implemented".format(whoami()))
 
 
 cases = {

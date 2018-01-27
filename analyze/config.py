@@ -1,11 +1,12 @@
 #!/usr/bin/env python
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# Copyright (c) 2017, Linaro Limited
+#
 
 import sys
 from pathlib import Path
 from timestamp import Subsystem
-
-if sys.version_info[0] < 3:
-    raise "Python 3 should be used to run this script"
 
 if __name__ == '__main__':
     sys.exit("This source file should be used only as a module")
