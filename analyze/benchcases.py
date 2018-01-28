@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# Copyright (c) 2017, Linaro Limited
+# Copyright (c) 2018, Linaro Limited
 #
 
 from enum import Enum
@@ -27,8 +27,10 @@ class BenchmarkCase(Enum):
 
 
 def benchmark_client2tee(timestamp_parser):
-    raise NotImplementedError(
-        "{} is not implemented".format(whoami()))
+    # raise NotImplementedError(
+    #    "{} is not implemented".format(whoami()))
+    for ts in timestamp_parser:
+        print("address = {}.".format(str(ts.address)))
 
 
 def benchmark_kernelmode2tee(timestamp_parser):

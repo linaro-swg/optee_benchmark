@@ -5,6 +5,7 @@
 #
 
 import sys
+import traceback
 
 # path to all benchmark modules
 sys.path.append("analyze/")
@@ -28,8 +29,10 @@ try:
     if not (args.filename and Path(args.filename).is_file()):
         raise RuntimeError("Cannot find file: {}.".format(args.filename))
 
+    print("Loading dump file...")
     ts_parser = TimestampParser(Path(args.filename))
 
+    print("Analyzing {} benchmark case...".format(str(args.case)))
 # run benchmark case
     if args.case:
         cases[args.case](ts_parser)
@@ -37,3 +40,4 @@ try:
         cases[0](ts_parser)
 except Exception as inst:
     print("Error occured: " + str(inst))
+    traceback.print_exc(file=sys.stdout)

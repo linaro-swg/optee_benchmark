@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# Copyright (c) 2017, Linaro Limited
+# Copyright (c) 2018, Linaro Limited
 #
 
 import config
@@ -14,6 +14,10 @@ import yaml
 from enum import Enum
 
 __all__ = ["Timestamp", "Subsystem", "TimestampParser"]
+
+
+def whoami():
+        return sys._getframe(1).f_code.co_name
 
 
 class Subsystem(Enum):
@@ -35,8 +39,7 @@ class Addr2Line(object):
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE)
         # and let's use buffered input
-        self.stdin_wrapper = io.TextIOWrapper(self.process.stdin,
-                                              'utf-8')
+        self.stdin_wrapper = io.TextIOWrapper(self.process.stdin, 'utf-8')
 
     def __del__(self):
         if self.process:
@@ -57,10 +60,11 @@ class Addr2Line(object):
                 raise RuntimeError(
                     "addr2line terminated unexpectedly")
 
+        print("info = {}".format(str(info)))
         (file, line) = info.rsplit(":", 1)
 
         if file == "??":
-            raise RuntimeError("Illegal binary file")
+            raise RuntimeError("Illegal binary file or outdated symboles")
         if line == "0":
             raise RuntimeError("Illegal line")
 
@@ -75,23 +79,20 @@ class Timestamp(object):
     """
     _symbol_parsers = {}
 
-    def __init__(self, core, counter, subsystem, address, payload):
+    def __init__(self, core, counter, subsystem, address, payload=""):
         self.core = core
         self.counter = counter
-        if subsystem is not Subsystem:
-            raise TypeError("Wrong subsystem type")
-
-        self.subsystem = subsystem
-        self.address = long(address)
+        self.subsystem = self._resolve_subsystem(subsystem)
+        self.address = int(address)
         self.payload = payload
 
         self._parse_addr()
 
     def _parse_addr(self):
         if self.address and self.subsystem:
-            if self.subsystem not in self.__symbol_parsers:
-                self._symbol_parsers[self.subsystem, Addr2Line(
-                    config.subsystem_paths[self.subsystem])]
+            if self.subsystem not in self._symbol_parsers:
+                self._symbol_parsers[self.subsystem] = Addr2Line(
+                    config.subsystem_paths[self.subsystem])
 
             (self.filename, self.line) = \
                 self._symbol_parsers[self.subsystem].lookup(self.address)
@@ -100,7 +101,15 @@ class Timestamp(object):
             raise ValueError('Timestamp address/subsystem isn\'t initialized')
 
     def _parse_payload(self):
-        raise NotImplementedError
+        raise NotImplementedError(
+            "{} is not implemented".format(whoami()))
+
+    def _resolve_subsystem(self, subsystem):
+        return {
+            "libteec": Subsystem.LIBTEEC,
+            "kmodule": Subsystem.LINUXMOD,
+            "core": Subsystem.OPTEECORE
+        }[subsystem]
 
 
 class TimestampParser(object):
@@ -111,6 +120,7 @@ class TimestampParser(object):
 
         self.i = 0
         self.yaml_path = yaml_path
+
         self.doc = yaml.load(open(str(yaml_path), 'r'))
         self.n = len(self.doc["timestamps"])
 
@@ -124,8 +134,16 @@ class TimestampParser(object):
         if self.i >= self.n:
             raise StopIteration()
 
-        print(self.doc["timestamps"][self.i])
+        ts_yaml = self.doc["timestamps"][self.i]
+        core = int(ts_yaml["core"])
+        counter = int(ts_yaml["counter"])
+        address = int(ts_yaml["address"])
+        subsystem = str(ts_yaml["component"])
+
+        ts = Timestamp(core, counter, subsystem, address, )
         self.i += 1
+
+        return ts
 
 
 if __name__ == '__main__':
