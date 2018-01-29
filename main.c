@@ -55,7 +55,10 @@ static TEEC_Session sess;
 static volatile sig_atomic_t is_running;
 static yaml_emitter_t emitter;
 
-
+struct consumer_param {
+	pid_t child_pid;
+	char *ts_filepath;
+};
 void sigint_handler(int data)
 {
 	(void)data;
@@ -321,7 +324,10 @@ static void *ts_consumer(void *arg)
 	uint32_t cores;
 	struct tee_time_st ts_data;
 	FILE *ts_file;
-	char *tsfile_path = arg;
+	struct consumer_param *prm = (struct consumer_param *)arg;
+	char *tsfile_path = prm->ts_filepath;
+	pid_t child_pid = prm->child_pid;
+	size_t teec_dyn_addr = 0;
 
 	if (!tsfile_path)
 		ERROR_GOTO(exit, "Wrong timestamp file path");
@@ -349,6 +355,18 @@ static void *ts_consumer(void *arg)
 					"pc = 0x%" PRIx64 "; system = %s",
 					i, ts_data.cnt, ts_data.addr,
 					bench_str_src(ts_data.src));
+				if (!teec_dyn_addr) {
+					teec_dyn_addr = get_library_load_offset
+						(child_pid,
+						LIBTEEC_NAME);
+					INFO("Libteec load address = %x",
+						teec_dyn_addr);
+				}
+				if (ts_data.src == TEE_BENCH_CLIENT) {
+					DBG("ts_addr = %llx, teec_addr = %x",
+						ts_data.addr, teec_dyn_addr);
+					ts_data.addr -= teec_dyn_addr;
+				}
 				if (!fill_timestamp(i, ts_data.cnt,
 					ts_data.addr,
 					bench_str_src(ts_data.src)))
@@ -389,6 +407,7 @@ int main(int argc, char *argv[])
 	char *tsfile_path;
 	uint32_t cores;
 	pthread_t consumer_thread;
+	struct consumer_param prm;
 
 	if (argc == 1) {
 		usage(argv[0]);
@@ -432,7 +451,6 @@ int main(int argc, char *argv[])
 		ERROR_EXIT("Starting origin host application failed.");
 	} else if (pid > 0) {
 		is_running = 1;
-
 		tsfile_path = malloc(strlen(testapp_path) +
 					strlen(TSFILE_NAME_SUFFIX) + 1);
 		if (!tsfile_path)
@@ -446,8 +464,11 @@ int main(int argc, char *argv[])
 		INFO("Dumping timestamps to %s ...", tsfile_path);
 		print_line();
 
+		prm.child_pid = pid;
+		prm.ts_filepath = tsfile_path;
+
 		if (pthread_create(&consumer_thread, NULL,
-				ts_consumer, tsfile_path)) {
+				ts_consumer, &prm)) {
 			DBG( "Error creating ts consumer thread");
 			ERROR_EXIT("Can't start process of reading timestamps");
 		}
