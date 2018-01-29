@@ -149,3 +149,47 @@ void *mmap_paddr(intptr_t paddr, uint64_t size)
 	close(devmem);
 	return (hw_addr + offset);
 }
+
+size_t get_library_load_offset(pid_t pid, const char *libname)
+{
+	char path[256];
+	char buf[256];
+	FILE *file;
+	size_t addr = 0;
+	size_t start, end, offset;
+	char flags[4];
+	int len;
+	int len_libname = strlen(libname);
+
+	snprintf(path, sizeof(path), "/proc/%d/smaps", pid);
+
+	file = fopen(path, "rt");
+	if (file == NULL)
+		return 0;
+
+	while (fgets(buf, sizeof(buf), file) != NULL) {
+		len = strlen(buf);
+		if (len > 0 && buf[len-1] == '\n')
+			buf[--len] = '\0';
+
+		if (len <= len_libname || !strstr(buf, libname))
+			continue;
+
+		printf("%s\n", buf);
+		if (sscanf(buf, "%zx-%zx %c%c%c%c %zx", &start, &end,
+			   &flags[0], &flags[1],
+			   &flags[2], &flags[3], &offset) != 7)
+			continue;
+
+		if (flags[0] != 'r' || flags[2] != 'x')
+			continue;
+
+		addr = start - offset;
+		break;
+	}
+
+	fclose(file);
+
+	return addr;
+}
+

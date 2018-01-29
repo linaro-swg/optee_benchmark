@@ -74,5 +74,6 @@
 #define RING_BADPARM	-1
 #define RING_NODATA		-2
 
+#define LIBTEEC_NAME	"libteec.so"
 #endif /* COMMON.H */
 
