@@ -43,6 +43,8 @@ void print_line(void);
 void alloc_argv(int argc, char *argv[], char **new_argv[]);
 void dealloc_argv(int new_argc, char **new_argv);
 
+void *mmap_paddr(intptr_t paddr, uint64_t size);
+
 /* get amount of cores */
 uint32_t get_cores(void);
 #endif /* BENCHMARK_AUX_H */
