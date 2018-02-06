@@ -184,27 +184,29 @@ static bool init_emitter(FILE *ts_file)
 	/* Stream start */
 	if (!yaml_stream_start_event_initialize(&event, YAML_UTF8_ENCODING))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML stream start event");
+			"Failed to initialize YAML stream start event");
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_GOTO(emitter_delete, "Failed to emit YAML stream start event");
+		ERROR_GOTO(emitter_delete,
+			"Failed to emit YAML stream start event");
 
 	/* Document start */
 	if (!yaml_document_start_event_initialize(&event,
-							NULL, NULL, NULL, YAML_IMPLICIT))
+			NULL, NULL, NULL, YAML_IMPLICIT))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML document start event");
+			"Failed to initialize YAML document start event");
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_GOTO(emitter_delete, "Failed to emit YAML doc start event");
+		ERROR_GOTO(emitter_delete,
+			"Failed to emit YAML doc start event");
 
 	/* Mapping start */
 	if (!yaml_mapping_start_event_initialize(&event,
 				NULL, NULL , YAML_IMPLICIT,
 				YAML_ANY_SEQUENCE_STYLE))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML mapping start event");
+			"Failed to initialize YAML mapping start event");
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_GOTO(emitter_delete,
-				"Failed to emit YAML sequence mapping event");
+			"Failed to emit YAML sequence mapping event");
 	/* Key timestamps */
 	yaml_scalar_event_initialize(&event, NULL, NULL,
 		(yaml_char_t *)"timestamps", -1, 1, 1, YAML_PLAIN_SCALAR_STYLE);
@@ -216,9 +218,10 @@ static bool init_emitter(FILE *ts_file)
 				NULL, NULL , YAML_IMPLICIT,
 				YAML_ANY_SEQUENCE_STYLE))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML sequence start event");
+			"Failed to initialize YAML sequence start event");
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_GOTO(emitter_delete, "Failed to emit YAML sequence start event");
+		ERROR_GOTO(emitter_delete,
+			"Failed to emit YAML sequence start event");
 
 	return true;
 emitter_delete:
@@ -233,31 +236,33 @@ static void deinit_emitter()
 	/* Sequence cmd */
 	if (!yaml_sequence_end_event_initialize(&event))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML sequence end event");
+			"Failed to initialize YAML sequence end event");
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_GOTO(emitter_delete, "Failed to emit YAML sequence end event");
+		ERROR_GOTO(emitter_delete,
+			"Failed to emit YAML sequence end event");
 
 	/* Mapping end */
 	if (!yaml_mapping_end_event_initialize(&event))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML mapping end event");
+			"Failed to initialize YAML mapping end event");
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_GOTO(emitter_delete,
-				"Failed to emit YAML mapping end event");
+			"Failed to emit YAML mapping end event");
 
 	/* Document end */
 	if (!yaml_document_end_event_initialize(&event, 0))
 		ERROR_GOTO(emitter_delete,
-				"Failed to initialize YAML document end event");
+			"Failed to initialize YAML document end event");
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_GOTO(emitter_delete, "Failed to emit YAML doc end event");
 
 	/* Stream end */
 	if (!yaml_stream_end_event_initialize(&event))
 		ERROR_GOTO(emitter_delete,
-				"Error occured while initialising YAML stream end event");
+			"Failed to initialise YAML stream end event");
 	if (!yaml_emitter_emit(&emitter, &event))
-		ERROR_GOTO(emitter_delete, "Failed to emit YAML stream end event");
+		ERROR_GOTO(emitter_delete,
+			"Failed to emit YAML stream end event");
 
 emitter_delete:
 	yaml_emitter_delete(&emitter);
@@ -290,7 +295,8 @@ static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
 	if (!yaml_mapping_start_event_initialize(&event,
 				NULL, NULL , YAML_IMPLICIT,
 				YAML_ANY_SEQUENCE_STYLE))
-		ERROR_RETURN_FALSE("Failed to initialize YAML mapping start event");
+		ERROR_RETURN_FALSE(
+			"Failed to initialize YAML mapping start event");
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_RETURN_FALSE("Failed to emit YAML mapping start event");
 
@@ -308,7 +314,8 @@ static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
 
 	/* Mapping end */
 	if (!yaml_mapping_end_event_initialize(&event))
-		ERROR_RETURN_FALSE("Failed to initialize YAML mapping end event");
+		ERROR_RETURN_FALSE(
+			"Failed to initialize YAML mapping end event");
 	if (!yaml_emitter_emit(&emitter, &event))
 		ERROR_RETURN_FALSE("Failed to emit YAML mapping end event");
 
@@ -341,7 +348,8 @@ static void *ts_consumer(void *arg)
 		ERROR_GOTO(exit, "Can't open timestamp file");
 
 	if (!init_emitter(ts_file))
-		ERROR_GOTO(file_close, "Error occured in emitter initialization");
+		ERROR_GOTO(file_close,
+			"Error occured in emitter initialization");
 
 	while (is_running) {
 		ts_received = false;
@@ -438,7 +446,8 @@ int main(int argc, char *argv[])
 		tsfile_path = malloc(strlen(testapp_path) +
 					strlen(TSFILE_NAME_SUFFIX) + 1);
 		if (!tsfile_path)
-			ERROR_EXIT("Memory allocation failed for timestamp file path.");
+			ERROR_EXIT("Memory allocation failed "
+					"for timestamp file path.");
 
 		tsfile_path[0] = '\0';
 		strcat(tsfile_path, testapp_path);
@@ -459,7 +468,7 @@ int main(int argc, char *argv[])
 		/* wait for our consumer thread terminate */
 		if (pthread_join(consumer_thread, NULL)) {
 			DBG("Error joining thread");
-			ERROR_EXIT("Something went wrong while consuming timestamps");
+			ERROR_EXIT("Couldn't start consuming timestamps");
 		}
 	}
 	else {
