@@ -49,13 +49,10 @@
 static struct tee_ts_global *bench_ts_global;
 
 static const TEEC_UUID pta_benchmark_uuid = PTA_BENCHMARK_UUID;
-static TEEC_SharedMemory ts_buf_shm = {
-		.flags = TEEC_MEM_INPUT | TEEC_MEM_OUTPUT
-};
 static TEEC_Context ctx;
 static TEEC_Session sess;
 
-static volatile sig_atomic_t is_running;
+static sig_atomic_t is_running;
 static yaml_emitter_t emitter;
 
 
@@ -82,52 +79,42 @@ static void open_bench_pta(void)
 static void close_bench_pta(void)
 {
 	/* release benchmark timestamp shm */
-	TEEC_ReleaseSharedMemory(&ts_buf_shm);
 	TEEC_CloseSession(&sess);
 	TEEC_FinalizeContext(&ctx);
 }
 
-static void init_ts_global(void *ts_global, uint32_t cores)
-{
-	unsigned int i;
-	struct tee_ts_cpu_buf *cpu_buf;
-
-	/* init global timestamp buffer */
-	bench_ts_global = (struct tee_ts_global *)ts_global;
-	bench_ts_global->cores = cores;
-
-	/* init per-cpu timestamp buffers */
-	for (i = 0; i < cores; i++) {
-		cpu_buf = &bench_ts_global->cpu_buf[i];
-		memset(cpu_buf, 0, sizeof(struct tee_ts_cpu_buf));
-	}
-}
-
-static void register_bench_buf(uint32_t cores)
+static void alloc_bench_buf(uint32_t cores)
 {
 	TEEC_Result res;
 	TEEC_Operation op = { 0 };
 	uint32_t ret_orig;
+	intptr_t paddr_ts_buf = 0;
+	size_t size;
 
-	ts_buf_shm.size = sizeof(struct tee_ts_global) +
-			sizeof(struct tee_ts_cpu_buf) * cores;
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT,
+			TEEC_VALUE_INPUT, TEEC_NONE, TEEC_NONE);
 
-	/* allocate global timestamp buffer */
-	res = TEEC_AllocateSharedMemory(&ctx, &ts_buf_shm);
-	tee_check_res(res, "TEEC_AllocateSharedMemory");
+	op.params[1].value.a = cores;
 
-	init_ts_global(ts_buf_shm.buffer, cores);
-
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_PARTIAL_INOUT,
-			TEEC_NONE, TEEC_NONE, TEEC_NONE);
-	op.params[0].memref.parent = &ts_buf_shm;
-
-	TEEC_InvokeCommand(&sess, BENCHMARK_CMD_REGISTER_MEMREF,
+	res = TEEC_InvokeCommand(&sess, BENCHMARK_CMD_REGISTER_MEMREF,
 					&op, &ret_orig);
 	tee_check_res(res, "TEEC_InvokeCommand");
+
+	paddr_ts_buf = op.params[0].value.a;
+	size = op.params[0].value.b;
+
+	INFO("ts buffer paddr = %x, size = %d\n", paddr_ts_buf, size);
+	if (paddr_ts_buf) {
+
+		bench_ts_global = mmap_paddr(paddr_ts_buf, size);
+		if (!bench_ts_global)
+			ERROR_EXIT("Failed to allocate timestamp buffer");
+	} else {
+		ERROR_EXIT("Failed to allocate timestamp buffer");
+	}
 }
 
-static void unregister_bench(void)
+static void free_bench_buf(void)
 {
 	TEEC_Result res;
 	TEEC_Operation op = { 0 };
@@ -154,7 +141,7 @@ static void usage(char *progname)
 }
 
 static int timestamp_pop(struct tee_ts_cpu_buf *cpu_buf,
-						struct tee_time_st *ts)
+			 struct tee_time_st *ts)
 {
 	uint64_t ts_tail;
 
@@ -358,13 +345,15 @@ static void *ts_consumer(void *arg)
 						&ts_data);
 			if (!ret) {
 				ts_received = true;
-				DBG("Timestamp: core = %u; tick = %lld; pc = 0x%"
-						PRIx64 ";system = %s",
-						i, ts_data.cnt, ts_data.addr,
-						bench_str_src(ts_data.src));
+				DBG("Timestamp: core = %u; tick = %lld; "
+					"pc = 0x%" PRIx64 "; system = %s",
+					i, ts_data.cnt, ts_data.addr,
+					bench_str_src(ts_data.src));
 				if (!fill_timestamp(i, ts_data.cnt,
-						ts_data.addr, bench_str_src(ts_data.src)))
-					ERROR_GOTO(deinit_yaml, "Adding timestamp failed");
+					ts_data.addr,
+					bench_str_src(ts_data.src)))
+					ERROR_GOTO(deinit_yaml,
+					"Adding timestamp failed");
 
 			}
 		}
@@ -375,7 +364,8 @@ static void *ts_consumer(void *arg)
 				sched_yield();
 			} else {
 				ERROR_GOTO(deinit_yaml,
-					"No new data in the per-cpu ringbuffers, closing ts file");
+					"No new data in the per-cpu ringbuffers"
+					);
 			}
 		}
 	}
@@ -424,7 +414,7 @@ int main(int argc, char *argv[])
 
 	INFO("2. Allocating per-core buffers, cores detected = %d",
 					cores);
-	register_bench_buf(cores);
+	alloc_bench_buf(cores);
 
 	res = realpath(argv[1], testapp_path);
 	if (!res)
@@ -479,7 +469,7 @@ int main(int argc, char *argv[])
 	INFO("4. Done benchmark");
 
 	dealloc_argv(argc-1, testapp_argv);
-	unregister_bench();
+	free_bench_buf();
 	close_bench_pta();
 	return 0;
 }

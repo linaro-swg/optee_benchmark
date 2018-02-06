@@ -24,12 +24,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <fcntl.h>
 #include <libgen.h>
 #include <linux/limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "benchmark_aux.h"
@@ -120,4 +123,29 @@ void dealloc_argv(int new_argc, char **new_argv)
 uint32_t get_cores(void)
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+void *mmap_paddr(intptr_t paddr, uint64_t size)
+{
+	int devmem;
+	off_t offset = 0;
+	off_t page_addr;
+	intptr_t *hw_addr = (intptr_t *)paddr;
+
+	devmem = open("/dev/mem", O_RDWR);
+	if (!devmem)
+		return NULL;
+
+	offset = (off_t)hw_addr % getpagesize();
+	page_addr = (off_t)(hw_addr - offset);
+
+	hw_addr = (intptr_t *)mmap(0, size, PROT_READ|PROT_WRITE,
+					MAP_SHARED, devmem, page_addr);
+	if (hw_addr == MAP_FAILED) {
+		close(devmem);
+		return NULL;
+	}
+
+	close(devmem);
+	return (hw_addr + offset);
 }
