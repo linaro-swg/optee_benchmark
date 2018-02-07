@@ -36,7 +36,7 @@
 
 #ifdef DEBUG
 #define DBG(fmt, args...) printf("[" OUTPUT_APP_PREFIX \
-		"] DEBUG: %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, ##args)
+	"] DEBUG: %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, ##args)
 #else
 #define DBG(fmt, args...)
 #endif
@@ -74,5 +74,6 @@
 #define RING_BADPARM	-1
 #define RING_NODATA		-2
 
+#define LIBTEEC_NAME	"libteec.so"
 #endif /* COMMON.H */
 

@@ -24,12 +24,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <fcntl.h>
 #include <libgen.h>
 #include <linux/limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "benchmark_aux.h"
@@ -121,3 +124,75 @@ uint32_t get_cores(void)
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
+
+void *mmap_paddr(intptr_t paddr, uint64_t size)
+{
+	int devmem;
+	off_t offset = 0;
+	off_t page_addr;
+	intptr_t *hw_addr = (intptr_t *)paddr;
+
+	devmem = open("/dev/mem", O_RDWR);
+	if (!devmem)
+		return NULL;
+
+	offset = (off_t)hw_addr % getpagesize();
+	page_addr = (off_t)(hw_addr - offset);
+
+	hw_addr = (intptr_t *)mmap(0, size, PROT_READ|PROT_WRITE,
+					MAP_SHARED, devmem, page_addr);
+	if (hw_addr == MAP_FAILED) {
+		close(devmem);
+		return NULL;
+	}
+
+	close(devmem);
+	return (hw_addr + offset);
+}
+
+size_t get_library_load_offset(pid_t pid, const char *libname)
+{
+	char path[256];
+	char buf[256];
+	FILE* file;
+	size_t addr = 0;
+	size_t start, end, offset;
+	char flags[4];
+	int len;
+	int len_libname = strlen(libname);
+
+	snprintf(path, sizeof path, "/proc/%d/smaps", pid);
+
+	file = fopen(path, "rt");
+	if (file == NULL)
+		return 0;
+
+	while (fgets(buf, sizeof buf, file) != NULL) {
+		len = strlen(buf);
+		if (len > 0 && buf[len-1] == '\n') {
+		    buf[--len] = '\0';
+		}
+
+		if (len <= len_libname || !strstr(buf, libname)) {
+			continue;
+		}
+
+		printf("%s\n", buf);
+		if (sscanf(buf, "%zx-%zx %c%c%c%c %zx", &start, &end,
+			  &flags[0], &flags[1],
+			  &flags[2], &flags[3], &offset) != 7) {
+			continue;
+		}
+
+		if (flags[0] != 'r' || flags[2] != 'x') {
+			continue;
+		}
+		addr = start - offset;
+		break;
+	}
+
+	fclose(file);
+
+	return addr;
+}
+
