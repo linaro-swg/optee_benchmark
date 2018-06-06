@@ -123,6 +123,7 @@ static void free_bench_buf(void)
 	TEEC_Operation op = { 0 };
 	uint32_t ret_orig;
 
+	DBG("Freeing benchmark buffer.");
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_NONE,
 					TEEC_NONE, TEEC_NONE, TEEC_NONE);
 
@@ -355,13 +356,12 @@ static void *ts_consumer(void *arg)
 					"pc = 0x%" PRIx64 "; system = %s",
 					i, ts_data.cnt, ts_data.addr,
 					bench_str_src(ts_data.src));
-				if (!teec_dyn_addr) {
+				do {
 					teec_dyn_addr = get_library_load_offset
 						(child_pid,
 						LIBTEEC_NAME);
-					INFO("Libteec load address = %x",
-						teec_dyn_addr);
-				}
+
+				} while (!teec_dyn_addr && is_running);
 				if (ts_data.src == TEE_BENCH_CLIENT) {
 					DBG("ts_addr = %llx, teec_addr = %x",
 						ts_data.addr, teec_dyn_addr);
@@ -473,6 +473,8 @@ int main(int argc, char *argv[])
 		}
 		/* wait for child app exits */
 		waitpid(pid, &status, 0);
+		DBG("Origin host application finished executing");
+
 		is_running = 0;
 
 		/* wait for our consumer thread terminate */

@@ -136,8 +136,8 @@ void *mmap_paddr(intptr_t paddr, uint64_t size)
 	if (!devmem)
 		return NULL;
 
-	offset = (off_t)hw_addr % getpagesize();
-	page_addr = (off_t)(hw_addr - offset);
+	offset = (off_t)(uintptr_t)hw_addr % getpagesize();
+	page_addr = (off_t)(uintptr_t)(hw_addr - offset);
 
 	hw_addr = (intptr_t *)mmap(0, size, PROT_READ|PROT_WRITE,
 					MAP_SHARED, devmem, page_addr);
@@ -175,7 +175,6 @@ size_t get_library_load_offset(pid_t pid, const char *libname)
 		if (len <= len_libname || !strstr(buf, libname))
 			continue;
 
-		printf("%s\n", buf);
 		if (sscanf(buf, "%zx-%zx %c%c%c%c %zx", &start, &end,
 			   &flags[0], &flags[1],
 			   &flags[2], &flags[3], &offset) != 7)
