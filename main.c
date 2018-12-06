@@ -106,7 +106,7 @@ static void alloc_bench_buf(uint32_t cores)
 	paddr_ts_buf = op.params[0].value.a;
 	size = op.params[0].value.b;
 
-	INFO("ts buffer paddr = %x, size = %d\n", paddr_ts_buf, size);
+	INFO("ts buffer paddr = %" PRIiPTR ", size = %zu\n", paddr_ts_buf, size);
 	if (paddr_ts_buf) {
 
 		bench_ts_global = mmap_paddr(paddr_ts_buf, size);
