@@ -170,7 +170,7 @@ static bool init_emitter(FILE *ts_file)
 	/* Mapping start */
 	if (!yaml_mapping_start_event_initialize(&event,
 				NULL, NULL , YAML_IMPLICIT,
-				YAML_ANY_SEQUENCE_STYLE))
+				YAML_ANY_MAPPING_STYLE))
 		ERROR_GOTO(emitter_delete,
 			"Failed to initialize YAML mapping start event");
 	if (!yaml_emitter_emit(&emitter, &event))
@@ -263,7 +263,7 @@ static bool fill_timestamp(uint32_t core, uint64_t count, uint64_t addr,
 	/* Mapping start */
 	if (!yaml_mapping_start_event_initialize(&event,
 				NULL, NULL , YAML_IMPLICIT,
-				YAML_ANY_SEQUENCE_STYLE))
+				YAML_ANY_MAPPING_STYLE))
 		ERROR_RETURN_FALSE(
 			"Failed to initialize YAML mapping start event");
 	if (!yaml_emitter_emit(&emitter, &event))
